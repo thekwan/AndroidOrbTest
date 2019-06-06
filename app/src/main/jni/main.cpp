@@ -18,6 +18,8 @@ extern "C" {
  * Signature: (JJ)V
  */
 Mat prevFrame;
+vector<KeyPoint> kp_prev;
+Mat desc_prev;
 int frame_count = 0;
 
 JNIEXPORT void JNICALL Java_com_example_testapp_MainActivity_ConvertRGBtoGray
@@ -28,18 +30,69 @@ JNIEXPORT void JNICALL Java_com_example_testapp_MainActivity_ConvertRGBtoGray
 
     cvtColor(currFrame, grayFrame, COLOR_RGBA2GRAY);
 
-    vector<KeyPoint> kp1;
-    Ptr<ORB> orbF = ORB::create(500);
-    Mat desc1;
+    vector<KeyPoint> kp_curr;
+    Ptr<ORB> orbF = ORB::create(100);
+    Mat desc_curr;
 
-    // Feature extraction
-    orbF->detectAndCompute(grayFrame, noArray(), kp1, desc1);
+    /*
+     * Makes a keypoint & descriptor for the given current image
+     */
+    orbF->detectAndCompute(grayFrame, noArray(), kp_curr, desc_curr);
 
-    // Draw features on image
-    drawKeypoints(currFrame, kp1, currFrame, Scalar::all(-1), DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+    /*
+     * Matching descriptor vector between current and previous image
+     */
+    if( frame_count != 0 ) {
+        vector<DMatch> matches;
+        BFMatcher matcher(NORM_HAMMING);
+        matcher.match(desc_curr, desc_prev, matches);
+
+        /*
+         * Find good matches such that match distance is over 4 * minimum distance.
+         */
+        double min_dist, max_dist;
+        min_dist = matches[0].distance;
+
+        // Find max/min distance
+        for (int i = 0; i < matches.size(); i++) {
+            double dist = matches[i].distance;
+            if (dist < min_dist) min_dist = dist;
+        }
+
+        vector<DMatch> goodmatches;
+        double dist_thr = min_dist * 2;
+        for (int i = 0; i < matches.size(); i++) {
+            if (matches[i].distance < dist_thr)
+                goodmatches.push_back(matches[i]);
+        }
+
+        /*
+         * Draw features on the image
+         */
+#if 1
+        if (kp_prev.size() > 4 || kp_curr.size() > 4) {
+            for (int i = 0; i < goodmatches.size(); i++) {
+                int kp1_idx, kp2_idx;
+                kp1_idx = goodmatches[i].queryIdx;
+                kp2_idx = goodmatches[i].trainIdx;
+                cv::circle(currFrame, kp_curr[kp1_idx].pt, 5, cv::Scalar(255, 0, 0), 1, 8, 0);
+                cv::circle(currFrame, kp_prev[kp2_idx].pt, 5, cv::Scalar(0, 0, 255), 1, 8, 0);
+                cv::line(currFrame, kp_curr[kp1_idx].pt, kp_prev[kp2_idx].pt, cv::Scalar(0,255,0), 1, 8, 0);
+            }
+        }
+#endif
+    }
+    else {
+        frame_count = 1;
+    }
+#if 0
+    drawKeypoints(currFrame, kp_curr, currFrame, Scalar::all(-1), DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+#endif
 
     dispFrame = currFrame;
     prevFrame = grayFrame;
+    kp_prev = kp_curr;
+    desc_prev = desc_curr;
 
 #if 0
     if( frame_count != 0 ) {
